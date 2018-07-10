@@ -1,0 +1,11 @@
+<VirtualHost *:80>
+ServerAdmin webmaster@mwiws01 
+ServerName {{ domain }}
+ServerAlias www.{{ domain }}
+DocumentRoot {{ docroot }} 
+<Directory "{{docroot}}">
+    AllowOverride None
+    Require all granted
+</Directory>
+</VirtualHost>
+

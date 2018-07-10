@@ -1,0 +1,128 @@
+---
+- hosts: all
+
+  vars_files:
+    - vars.yaml
+
+  handlers:
+    - name: restart apache
+      service: name=httpd state=restarted
+
+  tasks:
+
+    - name: install the EPEL release rpm 
+      become: yes
+      become_user: root
+      yum:
+        name: http://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+        state: present
+
+    - name: Ensure Apache is at the Latest version
+      become: yes
+      become_user: root
+      tags:
+        - web
+      yum:
+        name: httpd
+        state: latest
+
+    - name: "Create sites-available and sites-enabled Directories"
+      become: yes
+      become_user: root
+      tags:
+        - web
+      file:
+        dest: "{{ item }}"
+        owner: root
+        group: root
+        mode: 0644
+        state: directory
+      with_items:
+        - "/etc/httpd/sites-enabled"
+        - "/etc/httpd/sites-available"
+
+    - name: Modify the Default Apache Configuration file
+      become: yes
+      become_user: root
+      tags:
+        - web
+      template:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: root
+        group: root
+        mode: 0644
+      with_items:
+        - {src: 'basic_vh.conf.j2', dest: '/etc/httpd/sites-available/{{ domain }}.conf'}
+        - {src: 'httpd.conf.j2', dest: '/etc/httpd/conf/httpd.conf'}
+      
+    - name: Create the Document Root Direcotory
+      become_user: root
+      become: yes
+      tags:
+        - web
+      file:
+        dest: "{{ docroot }}"
+        mode: 0755
+        owner: apache
+        group: apache
+        state: directory
+
+    - name: Symlink the sites-available VH file to sites-enabled 
+      become: yes
+      become_user: root
+      tags:
+        - web
+      file:
+        src: "/etc/httpd/sites-available/{{ domain }}.conf"
+        dest: "/etc/httpd/sites-enabled/{{ domain }}.conf"
+        state: link
+      notify: restart apache
+
+    - name: Make Sure mime.types file is available
+      tags:
+        - web
+      file:
+        dest: /etc/httpd/conf/mime.types
+        state: file
+      register: mimeout
+      ignore_errors: True
+
+    - name: Copy the /etc/mime.types file to httpd conf
+      become: yes
+      become_user: root
+      tags:
+        - web
+      shell: "cp /etc/mime.types /etc/httpd/conf/mime.types"
+      when: mimeout is failed
+
+    - name: Download the home page of www.middlewareinventory.com to tmp
+      tags:
+        - web
+      become: yes
+      become_user: root
+      shell: 
+        wget http://www.mwinventory.in
+      args:
+        chdir: "/tmp"
+        creates: "index.html"
+
+    - name : Changing file permission of downloaded index.html and copy to DocRoot
+      tags:
+        - web
+      become: yes
+      become_user: root
+      copy:
+        remote_src: yes
+        src: "/tmp/index.html"
+        dest: "{{docroot}}/index.html"
+        owner: apache
+        group: apache
+        mode: 0755
+
+    - name: Make Sure the Apache is Running
+      tags:
+        - web
+      become: yes
+      become_user: root
+      service: name=httpd state=restarted enabled=yes
